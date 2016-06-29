@@ -23,7 +23,6 @@ class Player(object):
         self.strips[self.n].iter()
         self.img = self.strips[self.n].next()
         self.empty = {}
-        self.update(0, 0, "down", o_screen, self.empty)
         self.pos_x = 0
         self.pos_y = 0
         self.dir_move = {}
@@ -31,14 +30,42 @@ class Player(object):
         self.pressed_down = False
         self.pressed_left = False
         self.pressed_right = False
-        self.direction = {
-            "UP": "up",
-            "DOWN": "down",
-            "LEFT": "left",
-            "RIGHT": "right"
-        }
+        self.player_rect = pygame.Rect(self.x, self.y, 32, 32)
+        self.surface = o_screen
 
-    def handle_event(self, events):
+    def move(self, dx, dy, o_wall):
+
+        # Move each axis separately. Note that this checks for collisions both times.
+        if dx != 0:
+            self.move_single_axis(dx, 0, o_wall)
+        if dy != 0:
+            self.move_single_axis(0, dy, o_wall)
+
+    def move_single_axis(self, dx, dy, o_wall):
+
+        # Move the rect
+        self.player_rect.x += dx
+        self.player_rect.y += dy
+
+        # If you collide with a wall, move out based on velocity
+        for wall in o_wall:
+            new_x = wall.rect.x
+            new_y = wall.rect.y
+            obj_2 = pygame.Rect(new_x * 32, new_y * 32, 32, 32)
+            if self.player_rect.colliderect(obj_2):
+                if dx > 0:  # Moving right; Hit the left side of the wall
+                    self.player_rect.right = obj_2.left
+                if dx < 0:  # Moving left; Hit the right side of the wall
+                    self.player_rect.left = obj_2.right
+                if dy > 0:  # Moving down; Hit the top side of the wall
+                    self.player_rect.bottom = obj_2.top
+                if dy < 0:  # Moving up; Hit the bottom side of the wall
+                    self.player_rect.top = obj_2.bottom
+            # Used for testing
+            pygame.draw.rect(self.surface, (255, 0, 0), obj_2, 3)
+            pygame.draw.rect(self.surface, (0, 255, 0), self.player_rect, 3)
+
+    def handle_event(self, events, o_wall):
         return_val = {}
         for event in events:
             if event.type == pygame.QUIT:
@@ -63,68 +90,27 @@ class Player(object):
                     self.pressed_down = False
 
         if self.pressed_left:
-            self.pos_x = self.move_by
+            self.n = 1
+            self.pos_x = -self.move_by
             self.pos_y = 0
-            self.dir_move = self.direction["LEFT"]
         if self.pressed_right:
+            self.n = 2
             self.pos_x = self.move_by
             self.pos_y = 0
-            self.dir_move = self.direction["RIGHT"]
         if self.pressed_up:
+            self.n = 3
             self.pos_x = 0
-            self.pos_y = self.move_by
-            self.dir_move = self.direction["UP"]
+            self.pos_y = -self.move_by
         if self.pressed_down:
+            self.n = 0
             self.pos_x = 0
             self.pos_y = self.move_by
-            self.dir_move = self.direction["DOWN"]
         if not self.pressed_left and not self.pressed_right and not self.pressed_up and not self.pressed_down:
             self.pos_x = 0
             self.pos_y = 0
 
-        return_val.update({"pos_x": self.pos_x, "pos_y": self.pos_y, "dir_move": self.dir_move})
-        return return_val
-
-    def update(self, pos_x2, pos_y2, dir_move2, o_screen, o_wall):
-        #Testing
-        player_rect = pygame.Rect(self.x, self.y, 32, 32)
-        collision = False
-        for obj_img in o_wall:
-            new_x = obj_img.rect.x
-            new_y = obj_img.rect.y
-            obj_2 = pygame.Rect(new_x * 32, new_y * 32, 32, 32)
-            if player_rect.colliderect(obj_2):
-                collision = True
-                break
-
-        if pos_x2 != 0 and pos_y2 == 0:
-            if dir_move2 == "right":
-                if not collision:
-                    self.x += pos_x2
-                    self.n = 2
-                else:
-                    self.x -= 5
-            elif dir_move2 == "left":
-                if not collision:
-                    self.x -= pos_x2
-                    self.n = 1
-                else:
-                    self.x += 5
-        elif pos_y2 != 0 and pos_x2 == 0:
-            if dir_move2 == "down":
-                if not collision:
-                    self.y += pos_y2
-                    self.n = 0
-                else:
-                    self.y -= 5
-            elif dir_move2 == "up":
-                if not collision:
-                    self.y -= pos_y2
-                    self.n = 3
-                else:
-                    self.y += 5
-
-        o_screen.blit(self.strips[self.n].next(), (self.x, self.y))
+        self.move(self.pos_x, self.pos_y, o_wall)
+        self.surface.blit(self.strips[self.n].next(), (self.player_rect.x, self.player_rect.y))
 
 
 class WorldMap(object):
@@ -171,14 +157,12 @@ class Main(object):
         while 1:
             self.screen.fill((0, 0, 0))
             self.clock.tick(60)
-            return_val2 = self.player1.handle_event(pygame.event.get())
             self.world1.add_layer_to_surface("Grass")
             self.world1.add_layer_to_surface("Path")
             self.world1.add_layer_to_surface("TreeBase")
             self.world1.add_layer_to_surface("pathObjects")
-            #self.world1.add_layer_to_surface("Collision")
             self.wall = self.world1.make_blockers("Collision")
-            self.player1.update(return_val2["pos_x"], return_val2["pos_y"], return_val2["dir_move"], self.screen, self.wall)
+            self.player1.handle_event(pygame.event.get(), self.wall)
             self.world1.add_layer_to_surface("TreeTops")
             pygame.display.update()
 
